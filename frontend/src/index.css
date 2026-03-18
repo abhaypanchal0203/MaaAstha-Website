@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ngo-dark: #2d372c;
+  --color-ngo-green: #5c7a5d;
+  --color-ngo-light: #758a74;
+  --color-ngo-red: #e11d48;
+
+  --font-sans: "Inter", sans-serif;
+  --font-heading: "Poppins", sans-serif;
+}
+
+body {
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+}
