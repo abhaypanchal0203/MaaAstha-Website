@@ -1,11 +1,11 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 
-// Components Import
+// Components
 import Navbar from './components/Navbar';
-import Footer from './components/Footer'; // <-- Ye line add kar
+import Footer from './components/Footer';
 
-// Pages Import
+// Pages
 import Home from './pages/Home';
 import About from './pages/About';
 import MissingPeople from './pages/MissingPeople';
@@ -14,16 +14,21 @@ import Contact from './pages/Contact';
 import Donation from './pages/Donation';
 import Login from './pages/Login';
 import Volunteer from './pages/Volunteer';
+import AdminDashboard from './pages/AdminDashboard';
 
-function App() {
+const AppContent = () => {
+  const location = useLocation();
+  
+  // Checking if the current route is the admin dashboard
+  const isAdminRoute = location.pathname === '/admin-dashboard';
+
   return (
-    <BrowserRouter>
-      <Navbar />
-      
-      {/* min-h-screen aur flex-col ensure karega ki Footer hamesha niche rahe */}
-      <div className="pt-20 min-h-screen flex flex-col font-sans">
-        
-        {/* flex-grow poori baaki bachi jagah le lega, jisse footer niche push hoga */}
+    <>
+      {/* Show Navbar only if it's not the Admin Dashboard */}
+      {!isAdminRoute && <Navbar />}
+
+      {/* Remove top padding on admin route so the sidebar touches the top */}
+      <div className={`${!isAdminRoute ? 'pt-20' : ''} min-h-screen flex flex-col font-sans`}>
         <main className="flex-grow">
           <Routes>
             <Route path="/" element={<Home />} />
@@ -34,13 +39,23 @@ function App() {
             <Route path="/donate" element={<Donation />} />
             <Route path="/admin" element={<Login />} />
             <Route path="/volunteer" element={<Volunteer />} />
+            
+            {/* Admin Dashboard Route */}
+            <Route path="/admin-dashboard" element={<AdminDashboard />} />
           </Routes>
         </main>
 
-        {/* Routes ke khatam hone ke baad Footer aayega */}
-        <Footer />
-        
+        {/* Show Footer only if it's not the Admin Dashboard */}
+        {!isAdminRoute && <Footer />}
       </div>
+    </>
+  );
+};
+
+function App() {
+  return (
+    <BrowserRouter>
+      <AppContent />
     </BrowserRouter>
   );
 }
