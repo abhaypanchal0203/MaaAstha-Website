@@ -1,6 +1,40 @@
-import React from "react";
+import React, { useState } from "react";
 
 const RescueRequest = () => {
+  const initial = {
+    location: "",
+    condition: "",
+    reporterName: "",
+    reporterPhone: "",
+    photo: null,
+  };
+  const [form, setForm] = useState(initial);
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    try {
+      setSubmitting(true);
+      const body = new FormData();
+      body.append("location", form.location);
+      body.append("condition", form.condition);
+      body.append("reporterName", form.reporterName || "");
+      body.append("reporterPhone", form.reporterPhone);
+      if (form.photo instanceof File) body.append("photo", form.photo);
+
+      const res = await fetch("/api/rescue-requests", { method: "POST", body });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to send rescue alert");
+
+      alert("Rescue alert sent! Our team will contact you soon.");
+      setForm(initial);
+    } catch (err) {
+      alert(`Submit failed: ${err?.message || "Unknown error"}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="bg-gray-50 min-h-screen py-12 px-4">
       <div className="max-w-6xl mx-auto">
@@ -62,7 +96,7 @@ const RescueRequest = () => {
           <div className="lg:w-2/3 bg-white p-8 md:p-10 rounded-2xl shadow-xl border-t-4 border-ngo-red">
             <h2 className="text-2xl font-heading font-bold text-ngo-dark mb-6">Rescue Details Form</h2>
             
-            <form className="space-y-6">
+            <form onSubmit={submit} className="space-y-6">
               
               {/* Location */}
               <div>
@@ -72,6 +106,8 @@ const RescueRequest = () => {
                 <input 
                   type="text" 
                   required
+                  value={form.location}
+                  onChange={(e) => setForm({ ...form, location: e.target.value })}
                   className="w-full p-4 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ngo-red focus:border-ngo-red outline-none transition" 
                   placeholder="E.g., Outside Kalyan Station Platform 1 ticket counter" 
                 />
@@ -85,6 +121,8 @@ const RescueRequest = () => {
                 <textarea 
                   required
                   rows="3"
+                  value={form.condition}
+                  onChange={(e) => setForm({ ...form, condition: e.target.value })}
                   className="w-full p-4 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ngo-red focus:border-ngo-red outline-none transition resize-none" 
                   placeholder="Kapde kaise pehne hain? Chot lagi hai kya? Age kitni lag rahi hai?" 
                 ></textarea>
@@ -98,6 +136,7 @@ const RescueRequest = () => {
                 <input 
                   type="file" 
                   accept="image/*"
+                  onChange={(e) => setForm({ ...form, photo: e.target.files?.[0] || null })}
                   className="w-full p-3 bg-gray-50 border border-gray-300 rounded-lg focus:outline-none file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-red-50 file:text-ngo-red hover:file:bg-red-100 transition" 
                 />
               </div>
@@ -108,6 +147,8 @@ const RescueRequest = () => {
                   <label className="block text-sm font-bold text-gray-700 mb-2">Your Name</label>
                   <input 
                     type="text" 
+                    value={form.reporterName}
+                    onChange={(e) => setForm({ ...form, reporterName: e.target.value })}
                     className="w-full p-4 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ngo-red focus:border-ngo-red outline-none transition" 
                     placeholder="Enter your name" 
                   />
@@ -119,6 +160,8 @@ const RescueRequest = () => {
                   <input 
                     type="tel" 
                     required
+                    value={form.reporterPhone}
+                    onChange={(e) => setForm({ ...form, reporterPhone: e.target.value })}
                     className="w-full p-4 bg-gray-50 border border-gray-300 rounded-lg focus:ring-2 focus:ring-ngo-red focus:border-ngo-red outline-none transition" 
                     placeholder="So we can contact you" 
                   />
@@ -128,9 +171,10 @@ const RescueRequest = () => {
               {/* Submit Button */}
               <button 
                 type="submit" 
-                className="w-full bg-ngo-red text-white font-bold text-lg py-4 rounded-lg hover:bg-red-700 transition-colors duration-300 shadow-lg mt-4 flex justify-center items-center gap-2"
+                disabled={submitting}
+                className="w-full bg-ngo-red text-white font-bold text-lg py-4 rounded-lg hover:bg-red-700 disabled:bg-red-300 disabled:cursor-not-allowed transition-colors duration-300 shadow-lg mt-4 flex justify-center items-center gap-2"
               >
-                <span>🚨</span> Send Rescue Alert
+                <span>🚨</span> {submitting ? "Sending..." : "Send Rescue Alert"}
               </button>
               
             </form>

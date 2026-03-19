@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 
 const MissingPeople = () => {
   // 1. Search aur Filter ke liye State (Memory)
@@ -6,61 +6,46 @@ const MissingPeople = () => {
   const [minAge, setMinAge] = useState("");
   const [maxAge, setMaxAge] = useState("");
 
-  // Dummy Data (Thoda aur data add kiya hai testing ke liye)
-  const missingPersons = [
-    {
-      id: 1,
-      name: "Ramesh Kumar",
-      age: 45,
-      missingSince: "12 March 2026",
-      location: "Panvel Station, Navi Mumbai",
-      image: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
-    },
-    {
-      id: 2,
-      name: "Sita Devi",
-      age: 62,
-      missingSince: "10 March 2026",
-      location: "Kalyan West",
-      image: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
-    },
-    {
-      id: 3,
-      name: "Rahul Verma",
-      age: 28,
-      missingSince: "15 March 2026",
-      location: "Vashi Sector 17",
-      image: "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
-    },
-    {
-      id: 4,
-      name: "Arjun Singh",
-      age: 12,
-      missingSince: "16 March 2026",
-      location: "Dombivli East",
-      image: "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
-    },
-    {
-      id: 5,
-      name: "Meera Bai",
-      age: 55,
-      missingSince: "05 March 2026",
-      location: "Thane Station",
-      image: "https://images.unsplash.com/photo-1551836022-d5d88e9218df?ixlib=rb-4.0.3&auto=format&fit=crop&w=400&q=80",
-    }
-  ];
+  const [missingPersons, setMissingPersons] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const res = await fetch("/api/people");
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to load records");
+        if (mounted) setMissingPersons(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        if (mounted) setError(e?.message || "Failed to load records");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   // 2. Jadoo yahan hota hai (Filtering Logic)
-  const filteredPersons = missingPersons.filter((person) => {
-    // Naam check karega (chhota-bada letter sab handle ho jayega)
-    const matchName = person.name.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredPersons = useMemo(() => {
+    return missingPersons.filter((person) => {
+      const name = String(person?.name || "");
+      const age = Number(person?.age || 0);
+      // Naam check karega (chhota-bada letter sab handle ho jayega)
+      const matchName = name.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Age check karega
-    const matchMinAge = minAge === "" || person.age >= parseInt(minAge);
-    const matchMaxAge = maxAge === "" || person.age <= parseInt(maxAge);
+      // Age check karega
+      const matchMinAge = minAge === "" || age >= parseInt(minAge);
+      const matchMaxAge = maxAge === "" || age <= parseInt(maxAge);
 
-    return matchName && matchMinAge && matchMaxAge;
-  });
+      return matchName && matchMinAge && matchMaxAge;
+    });
+  }, [missingPersons, searchTerm, minAge, maxAge]);
 
   return (
     <div className="py-12 min-h-screen bg-gray-50">
@@ -114,15 +99,23 @@ const MissingPeople = () => {
         </div>
 
         {/* Dynamic Cards Grid System */}
-        {filteredPersons.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-16 bg-white rounded-2xl shadow-sm border border-gray-100 text-gray-600">
+            Loading...
+          </div>
+        ) : error ? (
+          <div className="text-center py-16 bg-white rounded-2xl shadow-sm border border-gray-100 text-red-600">
+            {error}
+          </div>
+        ) : filteredPersons.length > 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
             {filteredPersons.map((person) => (
-              <div key={person.id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 border border-gray-100">
+              <div key={person._id} className="bg-white rounded-2xl shadow-lg overflow-hidden hover:shadow-xl transition-shadow duration-300 border border-gray-100">
                 {/* Image Section */}
                 <div className="h-64 overflow-hidden relative">
                   <img 
-                    src={person.image} 
-                    alt={person.name} 
+                    src={person.imageUrl || "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80"} 
+                    alt={person.name || "Missing person"} 
                     className="w-full h-full object-cover object-top"
                   />
                   <div className="absolute top-4 right-4 bg-ngo-red text-white text-xs font-bold px-3 py-1 rounded-full animate-pulse">
@@ -135,7 +128,7 @@ const MissingPeople = () => {
                   <h3 className="text-2xl font-heading font-bold text-ngo-dark mb-2">{person.name}</h3>
                   <div className="space-y-2 text-gray-600 mb-6 text-sm">
                     <p><span className="font-semibold text-gray-800">Age:</span> {person.age} years</p>
-                    <p><span className="font-semibold text-gray-800">Missing Since:</span> {person.missingSince}</p>
+                    <p><span className="font-semibold text-gray-800">Added On:</span> {person.createdAt ? new Date(person.createdAt).toLocaleDateString() : "-"}</p>
                     <p><span className="font-semibold text-gray-800">Last Seen:</span> {person.location}</p>
                   </div>
 

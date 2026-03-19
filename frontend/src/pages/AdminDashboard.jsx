@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 // --- SUB-COMPONENTS ---
@@ -33,11 +33,41 @@ const AddPerson = () => {
     clothing: '', description: '', status: 'Sheltered' 
   };
   const [formData, setFormData] = useState(initialForm);
+  const [saving, setSaving] = useState(false);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    alert("Record saved successfully! (Backend integration pending)");
-    setFormData(initialForm);
+    try {
+      setSaving(true);
+
+      const body = new FormData();
+      body.append("name", formData.name);
+      body.append("age", String(formData.age));
+      body.append("gender", formData.gender);
+      body.append("location", formData.location);
+      body.append("identificationMarks", formData.identificationMarks || "");
+      body.append("clothing", formData.clothing || "");
+      body.append("description", formData.description);
+      body.append("status", formData.status || "Sheltered");
+      if (formData.image instanceof File) body.append("image", formData.image);
+
+      const res = await fetch("/api/people", {
+        method: "POST",
+        body,
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || "Failed to save record");
+      }
+
+      alert("Record saved successfully!");
+      setFormData(initialForm);
+    } catch (err) {
+      alert(`Save failed: ${err?.message || "Unknown error"}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -118,8 +148,8 @@ const AddPerson = () => {
           <button type="button" onClick={() => setFormData(initialForm)} className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium">
             Clear Form
           </button>
-          <button type="submit" className="px-6 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors shadow-sm font-medium">
-            Save Record
+          <button disabled={saving} type="submit" className="px-6 py-2 text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 disabled:cursor-not-allowed rounded-lg transition-colors shadow-sm font-medium">
+            {saving ? "Saving..." : "Save Record"}
           </button>
         </div>
       </form>
@@ -128,16 +158,66 @@ const AddPerson = () => {
 };
 
 const Records = () => {
-  const [records] = useState([
-    { id: 1, name: 'Unknown Male', age: 45, location: 'Central Station', status: 'Sheltered' },
-    { id: 2, name: 'Sunita Sharma', age: 62, location: 'Market Road', status: 'Reunited' },
-  ]);
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [deletingId, setDeletingId] = useState("");
+
+  const load = async () => {
+    try {
+      setLoading(true);
+      setError("");
+      const res = await fetch("/api/people");
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to load records");
+      setRecords(Array.isArray(json.data) ? json.data : []);
+    } catch (e) {
+      setError(e?.message || "Failed to load records");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const remove = async (record) => {
+    if (!record?._id) return;
+    const ok = window.confirm(`Delete record for "${record.name}"? This cannot be undone.`);
+    if (!ok) return;
+    try {
+      setDeletingId(record._id);
+      const res = await fetch(`/api/people/${record._id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) throw new Error(json?.error || "Delete failed");
+      setRecords((prev) => prev.filter((r) => r._id !== record._id));
+    } catch (e) {
+      alert(`Delete failed: ${e?.message || "Unknown error"}`);
+    } finally {
+      setDeletingId("");
+    }
+  };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-      <div className="p-6 border-b border-gray-100">
+      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
         <h2 className="text-xl font-bold text-gray-800">Shelter Records</h2>
+        <button
+          type="button"
+          onClick={load}
+          className="text-sm px-3 py-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-700"
+        >
+          Refresh
+        </button>
       </div>
+      {loading ? (
+        <div className="p-6 text-gray-600">Loading...</div>
+      ) : error ? (
+        <div className="p-6 text-red-600">{error}</div>
+      ) : records.length === 0 ? (
+        <div className="p-6 text-gray-600">No records yet.</div>
+      ) : (
       <table className="w-full text-left border-collapse">
         <thead>
           <tr className="bg-gray-50 text-gray-500 text-sm border-b">
@@ -145,11 +225,12 @@ const Records = () => {
             <th className="p-4">Age</th>
             <th className="p-4">Location Found</th>
             <th className="p-4">Status</th>
+            <th className="p-4 text-right">Actions</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
           {records.map((record) => (
-            <tr key={record.id} className="hover:bg-gray-50">
+            <tr key={record._id} className="hover:bg-gray-50">
               <td className="p-4 font-medium text-gray-800">{record.name}</td>
               <td className="p-4 text-gray-600">{record.age}</td>
               <td className="p-4 text-gray-600">{record.location}</td>
@@ -160,10 +241,241 @@ const Records = () => {
                   {record.status}
                 </span>
               </td>
+              <td className="p-4 text-right">
+                <button
+                  type="button"
+                  disabled={deletingId === record._id}
+                  onClick={() => remove(record)}
+                  className="text-sm px-3 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {deletingId === record._id ? "Deleting..." : "Delete"}
+                </button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
+      )}
+    </div>
+  );
+};
+
+const Donations = () => {
+  const [donations, setDonations] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const res = await fetch("/api/donations");
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to load donations");
+        if (mounted) setDonations(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        if (mounted) setError(e?.message || "Failed to load donations");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-gray-800">Donations</h2>
+        <span className="text-sm text-gray-500">{donations.length} records</span>
+      </div>
+      {loading ? (
+        <div className="p-6 text-gray-600">Loading...</div>
+      ) : error ? (
+        <div className="p-6 text-red-600">{error}</div>
+      ) : donations.length === 0 ? (
+        <div className="p-6 text-gray-600">No donations yet.</div>
+      ) : (
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-500 text-sm border-b">
+              <th className="p-4">Name</th>
+              <th className="p-4">Amount</th>
+              <th className="p-4">Mode</th>
+              <th className="p-4">Phone/Email</th>
+              <th className="p-4">Ref</th>
+              <th className="p-4">Date</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {donations.map((d) => (
+              <tr key={d._id} className="hover:bg-gray-50 align-top">
+                <td className="p-4 font-medium text-gray-800">
+                  <div>{d.name}</div>
+                  {d.message ? <div className="text-xs text-gray-500 mt-1">{d.message}</div> : null}
+                </td>
+                <td className="p-4 text-gray-600">₹{d.amount}</td>
+                <td className="p-4 text-gray-600">{d.paymentMode}</td>
+                <td className="p-4 text-gray-600">
+                  <div>{d.phone || "-"}</div>
+                  <div className="text-xs text-gray-500">{d.email || "-"}</div>
+                </td>
+                <td className="p-4 text-gray-600">{d.referenceId || "-"}</td>
+                <td className="p-4 text-gray-600">
+                  {d.createdAt ? new Date(d.createdAt).toLocaleString() : "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
+
+const Volunteers = () => {
+  const [volunteers, setVolunteers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const res = await fetch("/api/volunteers");
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to load volunteers");
+        if (mounted) setVolunteers(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        if (mounted) setError(e?.message || "Failed to load volunteers");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-gray-800">Volunteers</h2>
+        <span className="text-sm text-gray-500">{volunteers.length} records</span>
+      </div>
+      {loading ? (
+        <div className="p-6 text-gray-600">Loading...</div>
+      ) : error ? (
+        <div className="p-6 text-red-600">{error}</div>
+      ) : volunteers.length === 0 ? (
+        <div className="p-6 text-gray-600">No volunteer applications yet.</div>
+      ) : (
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-500 text-sm border-b">
+              <th className="p-4">Name</th>
+              <th className="p-4">Phone</th>
+              <th className="p-4">How can help</th>
+              <th className="p-4">Date</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {volunteers.map((v) => (
+              <tr key={v._id} className="hover:bg-gray-50 align-top">
+                <td className="p-4 font-medium text-gray-800">{v.name}</td>
+                <td className="p-4 text-gray-600">{v.phone}</td>
+                <td className="p-4 text-gray-600">{v.helpText}</td>
+                <td className="p-4 text-gray-600">
+                  {v.createdAt ? new Date(v.createdAt).toLocaleString() : "-"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+};
+
+const RescueRequests = () => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        setLoading(true);
+        setError("");
+        const res = await fetch("/api/rescue-requests");
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok || !json?.ok) throw new Error(json?.error || "Failed to load rescue requests");
+        if (mounted) setItems(Array.isArray(json.data) ? json.data : []);
+      } catch (e) {
+        if (mounted) setError(e?.message || "Failed to load rescue requests");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <h2 className="text-xl font-bold text-gray-800">Rescue Requests</h2>
+        <span className="text-sm text-gray-500">{items.length} records</span>
+      </div>
+      {loading ? (
+        <div className="p-6 text-gray-600">Loading...</div>
+      ) : error ? (
+        <div className="p-6 text-red-600">{error}</div>
+      ) : items.length === 0 ? (
+        <div className="p-6 text-gray-600">No rescue requests yet.</div>
+      ) : (
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="bg-gray-50 text-gray-500 text-sm border-b">
+              <th className="p-4">Location</th>
+              <th className="p-4">Condition</th>
+              <th className="p-4">Reporter</th>
+              <th className="p-4">Phone</th>
+              <th className="p-4">Photo</th>
+              <th className="p-4">Status</th>
+              <th className="p-4">Date</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {items.map((r) => (
+              <tr key={r._id} className="hover:bg-gray-50 align-top">
+                <td className="p-4 font-medium text-gray-800">{r.location}</td>
+                <td className="p-4 text-gray-600">{r.condition}</td>
+                <td className="p-4 text-gray-600">{r.reporterName || "-"}</td>
+                <td className="p-4 text-gray-600">{r.reporterPhone}</td>
+                <td className="p-4 text-gray-600">
+                  {r.photoUrl ? (
+                    <a className="text-blue-600 hover:underline" href={r.photoUrl} target="_blank" rel="noreferrer">
+                      View
+                    </a>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td className="p-4 text-gray-600">{r.status}</td>
+                <td className="p-4 text-gray-600">{r.createdAt ? new Date(r.createdAt).toLocaleString() : "-"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 };
@@ -178,6 +490,9 @@ const AdminDashboard = () => {
     { id: 'dashboard', label: 'Dashboard', icon: '📊' },
     { id: 'add', label: 'Add Person', icon: '➕' },
     { id: 'records', label: 'View Records', icon: '📁' },
+    { id: 'donations', label: 'Donations', icon: '💰' },
+    { id: 'volunteers', label: 'Volunteers', icon: '🤝' },
+    { id: 'rescues', label: 'Rescue Alerts', icon: '🚨' },
   ];
 
   const handleLogout = () => {
@@ -189,6 +504,9 @@ const AdminDashboard = () => {
       case 'dashboard': return <DashboardOverview />;
       case 'add': return <AddPerson />;
       case 'records': return <Records />;
+      case 'donations': return <Donations />;
+      case 'volunteers': return <Volunteers />;
+      case 'rescues': return <RescueRequests />;
       default: return <DashboardOverview />;
     }
   };
